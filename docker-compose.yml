@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: railvoice-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb+srv://99ayushsoni_db_user:Riyush%3C3R@cluster0.ptxlnzz.mongodb.net/railvoice?appName=Cluster0
+      - DATABASE_NAME=railvoice
+      - DEEPGRAM_API_KEY=37ddf10c356c6e9a9ba333a1b0c594ccaa030075
+      - DEEPGRAM_VOICE_MODEL=flux-priya-en
+      - PORT=8000
+      - HOST=0.0.0.0
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: railvoice-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always

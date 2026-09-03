@@ -1,0 +1,298 @@
+{
+  "bookings": [
+    {
+      "pnr": "4880208792",
+      "train_number": "22436",
+      "train_name": "Vande Bharat Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "BSB",
+      "to_station_name": "Varanasi Jn",
+      "departure_time": "06:00",
+      "arrival_time": "14:00",
+      "journey_date": "2026-09-04",
+      "travel_class": "CC",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Book In",
+          "age": 3,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C2",
+          "berth_number": "C2-2",
+          "berth_type": "Aisle Seat"
+        },
+        {
+          "name": "A  Ayush",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C3",
+          "berth_number": "C3-3",
+          "berth_type": "Middle Seat"
+        }
+      ],
+      "total_fare": 3500.0,
+      "base_fare_per_ticket": 1750.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "created_at": "2026-09-03T22:32:49.650921",
+      "_id": "1"
+    },
+    {
+      "pnr": "5966834902",
+      "train_number": "22436",
+      "train_name": "Vande Bharat Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "BSB",
+      "to_station_name": "Varanasi Jn",
+      "departure_time": "06:00",
+      "arrival_time": "14:00",
+      "journey_date": "2026-09-04",
+      "travel_class": "CC",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Book",
+          "age": 3,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C2",
+          "berth_number": "C2-2",
+          "berth_type": "Aisle Seat"
+        },
+        {
+          "name": "A  Ayush",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C3",
+          "berth_number": "C3-3",
+          "berth_type": "Middle Seat"
+        }
+      ],
+      "total_fare": 3500.0,
+      "base_fare_per_ticket": 1750.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "created_at": "2026-09-03T22:39:14.490335",
+      "_id": "2"
+    },
+    {
+      "pnr": "8251760243",
+      "train_number": "22436",
+      "train_name": "Vande Bharat Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "BSB",
+      "to_station_name": "Varanasi Jn",
+      "departure_time": "06:00",
+      "arrival_time": "14:00",
+      "journey_date": "2026-09-04",
+      "travel_class": "CC",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Ayush",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C2",
+          "berth_number": "C2-2",
+          "berth_type": "Aisle Seat"
+        }
+      ],
+      "total_fare": 1750.0,
+      "base_fare_per_ticket": 1750.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "created_at": "2026-09-03T22:43:11.511860",
+      "_id": "3"
+    },
+    {
+      "pnr": "3603702751",
+      "train_number": "22436",
+      "train_name": "Vande Bharat Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "BSB",
+      "to_station_name": "Varanasi Jn",
+      "departure_time": "06:00",
+      "arrival_time": "14:00",
+      "journey_date": "2026-09-04",
+      "travel_class": "CC",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Ayush Soni  Age",
+          "age": 22,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "C2",
+          "berth_number": "C2-2",
+          "berth_type": "Aisle Seat"
+        }
+      ],
+      "total_fare": 1750.0,
+      "base_fare_per_ticket": 1750.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "created_at": "2026-09-03T22:46:44.822044",
+      "_id": "4"
+    },
+    {
+      "pnr": "5160370726",
+      "train_number": "22436",
+      "train_name": "Vande Bharat Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "BSB",
+      "to_station_name": "Varanasi Jn",
+      "departure_time": "06:00",
+      "arrival_time": "14:00",
+      "journey_date": "2026-09-10",
+      "travel_class": "CC",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Ayush Sharma",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "Window",
+          "id_type": "Aadhaar Card",
+          "id_number": "XXXX-XXXX-1234",
+          "coach": "C2",
+          "berth_number": "C2-2",
+          "berth_type": "Aisle Seat"
+        }
+      ],
+      "total_fare": 1750.0,
+      "base_fare_per_ticket": 1750.0,
+      "status": "CONFIRMED",
+      "booked_via": "WEB_MANUAL",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "ayush_test1@example.com",
+      "user_id": "1",
+      "user_email": "ayush_test1@example.com",
+      "created_at": "2026-09-04T00:26:19.235119",
+      "_id": "5"
+    },
+    {
+      "pnr": "4278003011",
+      "train_number": "12952",
+      "train_name": "Mumbai Rajdhani Express",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "MMCT",
+      "to_station_name": "Mumbai Central",
+      "departure_time": "16:55",
+      "arrival_time": "08:35",
+      "journey_date": "2026-09-05",
+      "travel_class": "3A",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "Rahul",
+          "age": 28,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "B2",
+          "berth_number": "B2-2",
+          "berth_type": "Middle Berth"
+        },
+        {
+          "name": "Priya",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "B3",
+          "berth_number": "B3-3",
+          "berth_type": "Upper Berth"
+        }
+      ],
+      "total_fare": 4300.0,
+      "base_fare_per_ticket": 2150.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "user_id": null,
+      "user_email": null,
+      "created_at": "2026-09-04T00:38:57.237904",
+      "_id": "6"
+    },
+    {
+      "pnr": "5322214740",
+      "train_number": "12432",
+      "train_name": "Tvc Rajdhani",
+      "from_station_code": "NDLS",
+      "from_station_name": "New Delhi",
+      "to_station_code": "MMCT",
+      "to_station_name": "Mumbai Central",
+      "departure_time": "06:16",
+      "arrival_time": "21:40",
+      "journey_date": "2026-09-05",
+      "travel_class": "3A",
+      "quota": "GN",
+      "passengers": [
+        {
+          "name": "First   Rahul",
+          "age": 28,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "B2",
+          "berth_number": "B2-2",
+          "berth_type": "Middle Berth"
+        },
+        {
+          "name": "Second   Priya",
+          "age": 26,
+          "gender": "M",
+          "berth_preference": "No Preference",
+          "coach": "B3",
+          "berth_number": "B3-3",
+          "berth_type": "Upper Berth"
+        }
+      ],
+      "total_fare": 3700.0,
+      "base_fare_per_ticket": 1850.0,
+      "status": "CONFIRMED",
+      "booked_via": "VOICE_AGENT",
+      "contact_phone": "+91 9876543210",
+      "contact_email": "passenger@railvoice.in",
+      "user_id": null,
+      "user_email": null,
+      "created_at": "2026-09-04T02:51:51.160375",
+      "_id": "7"
+    }
+  ],
+  "sessions": [],
+  "users": [
+    {
+      "name": "Ayush User 1",
+      "email": "ayush_test1@example.com",
+      "password_hash": "26390f3901480df4eefeabf226b67a40:9015c87376896c7d3d149ba7057560381d63b9038a9d6eb5d35d64c798792fb3",
+      "phone": "+91 99999 11111",
+      "created_at": "2026-09-04T00:26:19.231573",
+      "_id": "1"
+    },
+    {
+      "name": "Other User 2",
+      "email": "user2_test@example.com",
+      "password_hash": "e6dc678e25bb5e4cec964b815086075c:f75eda971cd992e94cf8c5dab264c859db8cfd780d25ed6d89ced192421d4847",
+      "phone": null,
+      "created_at": "2026-09-04T00:26:19.244676",
+      "_id": "2"
+    }
+  ]
+}

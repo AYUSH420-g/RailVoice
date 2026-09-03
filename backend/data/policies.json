@@ -1,0 +1,72 @@
+{
+  "booking_rules": {
+    "max_passengers_per_ticket": 6,
+    "tatkal_max_passengers": 4,
+    "id_required": true,
+    "valid_ids": ["Aadhaar Card", "Voter ID", "Passport", "Driving License", "PAN Card", "Student ID"],
+    "tatkal_timings": {
+      "ac_classes": "10:00 AM IST on the day prior to train departure",
+      "non_ac_classes": "11:00 AM IST on the day prior to train departure"
+    },
+    "children_rule": "Children under 5 years travel free without a berth. Children aged 5 to 11 pay full fare if a berth is allocated, or half fare without a separate berth."
+  },
+  "cancellation_refund_rules": {
+    "more_than_48_hours_before_departure": {
+      "description": "Flat cancellation charge per passenger deducted",
+      "deductions": {
+        "1A": 240,
+        "EC": 240,
+        "2A": 200,
+        "3A": 180,
+        "CC": 180,
+        "SL": 120,
+        "2S": 60
+      }
+    },
+    "between_48_and_12_hours_before_departure": {
+      "description": "25% of total fare deducted, subject to minimum flat charge",
+      "percentage_deducted": 25
+    },
+    "between_12_and_4_hours_before_departure": {
+      "description": "50% of total fare deducted, subject to minimum flat charge",
+      "percentage_deducted": 50
+    },
+    "less_than_4_hours_or_after_chart_prep": {
+      "description": "No refund admissible once chart is prepared or less than 4 hours remain before scheduled departure",
+      "percentage_deducted": 100
+    },
+    "tatkal_tickets": {
+      "description": "Confirmed Tatkal tickets are non-refundable under standard cancellation.",
+      "percentage_deducted": 100
+    },
+    "waitlisted_rac_tickets": {
+      "description": "Waitlisted or RAC tickets cancelled up to 30 minutes before departure are refunded with flat clerkage fee of ₹60 per passenger."
+    }
+  },
+  "quota_rules": [
+    {
+      "code": "GN",
+      "name": "General Quota",
+      "description": "Open to all passengers booking advance tickets up to 120 days."
+    },
+    {
+      "code": "TQ",
+      "name": "Tatkal Quota",
+      "description": "Premium emergency quota opening 1 day prior to journey date."
+    },
+    {
+      "code": "LD",
+      "name": "Ladies Quota",
+      "description": "Reserved for solo female travelers or women traveling with children under 12."
+    },
+    {
+      "code": "SS",
+      "name": "Senior Citizen Quota",
+      "description": "Lower berth preference for male citizens aged 60+ and female citizens aged 45+ traveling solo."
+    }
+  ],
+  "security_and_conduct_policy": {
+    "prohibited_items": ["Inflammable substances, gas cylinders, fireworks, dangerous weapons"],
+    "alcohol_and_smoking": "Strictly prohibited inside coaches and station premises. Offense carries fine and prosecution under Railway Act Section 145."
+  }
+}
