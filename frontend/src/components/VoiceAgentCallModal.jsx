@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Sparkles, Send,
-  ShieldCheck, AlertTriangle, CheckCircle2, Bot, User, RefreshCw
+  ShieldCheck, AlertTriangle, CheckCircle2, Bot, User, RefreshCw, Radio
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import AudioWaveform from './AudioWaveform';
 import { sounds } from '../utils/audioEffects';
+import { WebRTCVoiceClient } from '../utils/webrtcClient';
 
 export default function VoiceAgentCallModal({ isOpen, onClose, onBookingCompleted, initialPrompt = null }) {
   const [callState, setCallState] = useState('DIALING');
@@ -14,7 +15,8 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
-  const [currentActionBadge, setCurrentActionBadge] = useState('Initiating Call to RailVoice Officer...');
+  const [currentActionBadge, setCurrentActionBadge] = useState('Initiating WebRTC Connection to RailVoice Officer...');
+  const [pipelineStage, setPipelineStage] = useState('IDLE');
   const [messages, setMessages] = useState([]);
   const [inputFeedback, setInputFeedback] = useState('');
   const [sessionInfo, setSessionInfo] = useState(null);
@@ -22,6 +24,7 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
   const [toolCalled, setToolCalled] = useState(null);
   const [silenceCountdown, setSilenceCountdown] = useState(null);
 
+  const webrtcClientRef = useRef(null);
   const socketRef = useRef(null);
   const recognitionRef = useRef(null);
   const audioPlayerRef = useRef(new Audio());
@@ -42,60 +45,9 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
     setSilenceCountdown(null);
   };
 
-  const handleSilenceTimeout = () => {
-    clearSilenceTimer();
-    try {
-      sounds.playCallDisconnect();
-    } catch (e) {}
-    setCurrentActionBadge("Call ended due to 5s silence");
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-    }
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-    }
-    if (socketRef.current) {
-      try { socketRef.current.close(); } catch (e) {}
-    }
-    setCallState('ENDED');
-    setTimeout(() => {
-      if (onClose) onClose();
-    }, 400);
-  };
-
-  const startSilenceTimer = () => {
-    clearSilenceTimer();
-    let remaining = 5;
-    setSilenceCountdown(remaining);
-
-    countdownIntervalRef.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearSilenceTimer();
-        handleSilenceTimeout();
-      } else {
-        setSilenceCountdown(remaining);
-      }
-    }, 1000);
-
-    silenceTimerRef.current = setTimeout(() => {
-      handleSilenceTimeout();
-    }, 5000);
-  };
-
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentActionBadge]);
-
-  // Silence auto-close effect: if no human speaks for 5s while waiting, stop & close
-  useEffect(() => {
-    if (callState === 'CONNECTED' && !isAgentSpeaking && !isUserSpeaking) {
-      startSilenceTimer();
-    } else {
-      clearSilenceTimer();
-    }
-    return () => clearSilenceTimer();
-  }, [callState, isAgentSpeaking, isUserSpeaking]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -115,8 +67,8 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
     }, 1200);
 
     const connectTimeout = setTimeout(() => {
-      connectWebSocket();
-    }, 2500);
+      connectCall();
+    }, 2000);
 
     return () => {
       clearTimeout(ringTimeout);
@@ -138,6 +90,54 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [callState]);
+
+  const connectCall = async () => {
+    const token = localStorage.getItem('railvoice_token');
+    const apiBase = import.meta.env.VITE_API_BASE_URL
+      ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '')
+      : `${window.location.protocol}//${window.location.hostname}:8000`;
+
+    // 1. Try WebRTC Audio Streaming with Deepgram Nova-2 STT & Flux TTS
+    try {
+      setCurrentActionBadge('Connecting via WebRTC (Deepgram Nova-2)...');
+      setPipelineStage('WEBRTC_STREAM');
+
+      const webrtc = new WebRTCVoiceClient({
+        apiBaseUrl: apiBase,
+        onStateChange: (st) => {
+          if (st === 'CONNECTED') {
+            setCallState('CONNECTED');
+            sounds.playConnectChime();
+            setPipelineStage('CONNECTED');
+            setCurrentActionBadge('⚡ WebRTC Active • Deepgram Voice Engine');
+          } else if (st === 'DISCONNECTED' || st === 'ENDED') {
+            setCallState('ENDED');
+            setPipelineStage('IDLE');
+          }
+        },
+        onTrack: () => {
+          setIsAgentSpeaking(true);
+          setPipelineStage('WEBRTC_OUTPUT');
+        },
+        onMessage: (data) => {
+          handleServerVoiceEvent(data);
+        }
+      });
+
+      webrtcClientRef.current = webrtc;
+      await webrtc.start(token);
+
+      if (initialPrompt) {
+        setTimeout(() => {
+          sendUserUtterance(initialPrompt);
+        }, 3000);
+      }
+      return;
+    } catch (err) {
+      console.warn('[WebRTC] WebRTC setup failed, falling back to WebSocket:', err);
+      connectWebSocket();
+    }
+  };
 
   const connectWebSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -207,9 +207,58 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
     if (data.action_badge) {
       setCurrentActionBadge(data.action_badge);
     }
+    if (data.pipeline_stage) {
+      setPipelineStage(data.pipeline_stage);
+    }
+
+    if (data.type === 'user_interim') {
+      setIsUserSpeaking(true);
+      setInputFeedback(data.text);
+      setPipelineStage('DEEPGRAM_STT');
+      clearSilenceTimer();
+      return;
+    }
+
+    if (data.type === 'user_final') {
+      setIsUserSpeaking(false);
+      setInputFeedback('');
+      setPipelineStage('TOOL_CALLING');
+      setMessages((prev) => [
+        ...prev,
+        { sender: 'user', text: data.text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      ]);
+      clearSilenceTimer();
+      return;
+    }
+
+    if (data.type === 'agent_interrupted') {
+      stopAgentSpeechAndInterrupt();
+      return;
+    }
+
+    if (data.type === 'agent_speech_done') {
+      setIsAgentSpeaking(false);
+      setPipelineStage('CONNECTED');
+      if (data.action_badge) setCurrentActionBadge(data.action_badge);
+      return;
+    }
+
+    if (data.type === 'tool_executed') {
+      setPipelineStage('DEEPGRAM_TTS');
+      if (data.tool_called) setToolCalled(data.tool_called);
+      if (data.booking_state) setBookingState(data.booking_state);
+      if (data.session) setSessionInfo(data.session);
+      if (data.tool_data && data.tool_data.pnr) {
+        sounds.playSuccessFanfare();
+        confetti({ particleCount: 90, spread: 80, origin: { y: 0.5 } });
+        if (onBookingCompleted) onBookingCompleted(data.tool_data);
+      }
+      return;
+    }
 
     if (data.type === 'agent_connected' || data.type === 'agent_speech') {
       const agentText = data.text;
+      setPipelineStage('WEBRTC_OUTPUT');
       setMessages((prev) => [...prev, { sender: 'agent', text: agentText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
 
       if (data.tool_data && data.tool_data.pnr) {
@@ -218,20 +267,23 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
         if (onBookingCompleted) onBookingCompleted(data.tool_data);
       }
 
-      if (isSpeakerOn && data.audio) {
-        playAudioBase64(data.audio);
-      } else if (isSpeakerOn && 'speechSynthesis' in window) {
-        speakBrowserTTS(agentText);
+      // If playing over WebRTC track, audio is streamed directly; otherwise fallback to audio element
+      if (!webrtcClientRef.current?.isConnected) {
+        if (isSpeakerOn && data.audio) {
+          playAudioBase64(data.audio);
+        } else if (isSpeakerOn && 'speechSynthesis' in window) {
+          speakBrowserTTS(agentText);
+        }
+      } else {
+        setIsAgentSpeaking(true);
       }
 
       if (data.session) {
         setSessionInfo(data.session);
       }
-
       if (data.booking_state) {
         setBookingState(data.booking_state);
       }
-
       if (data.tool_called) {
         setToolCalled(data.tool_called);
       }
@@ -261,6 +313,9 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
 
   const stopAgentSpeechAndInterrupt = () => {
     try {
+      if (webrtcClientRef.current) {
+        webrtcClientRef.current.sendInterrupt();
+      }
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
         audioPlayerRef.current.currentTime = 0;
@@ -272,6 +327,7 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
     }
     setIsAgentSpeaking(false);
     setIsUserSpeaking(true);
+    setPipelineStage('USER_SPEAKING');
     setCurrentActionBadge("👂 Listening to you...");
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: 'user_interrupt' }));
@@ -380,8 +436,11 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
       { sender: 'user', text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
     ]);
     setInputFeedback('');
+    setPipelineStage('TOOL_CALLING');
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (webrtcClientRef.current && webrtcClientRef.current.isConnected) {
+      webrtcClientRef.current.sendTextPrompt(text);
+    } else if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: 'user_speech', text }));
     } else {
       const apiBase = import.meta.env.VITE_API_BASE_URL
@@ -401,9 +460,14 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
   const handleHangUp = () => {
     sounds.playDisconnectTone();
     setCallState('ENDED');
+    setPipelineStage('IDLE');
     setIsAgentSpeaking(false);
     setIsUserSpeaking(false);
 
+    if (webrtcClientRef.current) {
+      try { webrtcClientRef.current.stop(); } catch (e) {}
+      webrtcClientRef.current = null;
+    }
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch (e) {}
     }
@@ -422,11 +486,17 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
   };
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
-    if (!isMuted && recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-    } else if (isMuted && recognitionRef.current) {
-      try { recognitionRef.current.start(); } catch (e) {}
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+    if (webrtcClientRef.current) {
+      webrtcClientRef.current.setMute(nextMute);
+    }
+    if (recognitionRef.current) {
+      if (nextMute) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      } else {
+        try { recognitionRef.current.start(); } catch (e) {}
+      }
     }
   };
 
@@ -483,6 +553,43 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
           </div>
         </div>
 
+        {/* Real-time Voice Pipeline Architecture HUD */}
+        <div className="bg-slate-900 text-slate-200 px-4 py-2 text-[10px] flex items-center justify-between overflow-x-auto gap-2 border-b border-slate-800 scrollbar-none font-mono">
+          <div className="flex items-center gap-1.5 shrink-0 text-slate-400 font-bold uppercase tracking-wider">
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            WebRTC Pipeline:
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'USER_SPEAKING' || isUserSpeaking ? 'bg-emerald-500 text-white font-bold ring-2 ring-emerald-300 animate-pulse' : 'bg-slate-800 text-slate-400'
+            }`}>🎤 Speak</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              webrtcClientRef.current?.isConnected ? 'bg-cyan-600 text-white font-bold' : 'bg-slate-800 text-slate-400'
+            }`}>⚡ WebRTC</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'DEEPGRAM_STT' ? 'bg-blue-600 text-white font-bold ring-2 ring-blue-300 animate-pulse' : 'bg-slate-800 text-slate-400'
+            }`}>🎙️ Deepgram STT</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'TOOL_CALLING' ? 'bg-purple-600 text-white font-bold ring-2 ring-purple-300 animate-pulse' : 'bg-slate-800 text-slate-400'
+            }`}>🛠️ Tools</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'LLM_GEN' || pipelineStage === 'TOOL_CALLING' ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-800 text-slate-400'
+            }`}>🧠 LLM</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'DEEPGRAM_TTS' ? 'bg-orange-500 text-white font-bold ring-2 ring-orange-300 animate-pulse' : 'bg-slate-800 text-slate-400'
+            }`}>🔊 Deepgram TTS</span>
+            <span className="text-slate-600">➔</span>
+            <span className={`px-2 py-0.5 rounded font-semibold transition-all ${
+              pipelineStage === 'WEBRTC_OUTPUT' || isAgentSpeaking ? 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-300 animate-pulse' : 'bg-slate-800 text-slate-400'
+            }`}>🎧 WebRTC Out</span>
+          </div>
+        </div>
+
         {/* Simple Circle Avatar with Wave Animations & Small Text */}
         <div className="py-6 px-6 bg-gradient-to-b from-slate-50 to-white flex flex-col items-center justify-center border-b border-slate-100 relative overflow-hidden">
           <div className="relative flex items-center justify-center my-3">
@@ -514,19 +621,20 @@ export default function VoiceAgentCallModal({ isOpen, onClose, onBookingComplete
             </div>
           </div>
 
-          {/* Small text: agent priya */}
+          {/* Small text: agent thalia */}
           <div className="flex items-center gap-1.5 mt-1">
             <span className="text-xs font-semibold text-slate-800 tracking-wide">
-              agent priya
+              agent thalia (aura 2)
             </span>
             <span className={`w-2 h-2 rounded-full ${isAgentSpeaking ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`} />
           </div>
 
-          {/* Silence countdown warning if user hasn't spoken */}
-          {silenceCountdown !== null && silenceCountdown <= 4 && !isAgentSpeaking && (
-            <span className="text-[10px] text-amber-600 font-medium mt-1 animate-pulse">
-              No speech detected • Closing in {silenceCountdown}s...
-            </span>
+          {/* Live User Speech Indicator */}
+          {inputFeedback && (
+            <div className="mt-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-medium flex items-center gap-2 animate-pulse max-w-sm text-center">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping shrink-0" />
+              <span className="truncate">"{inputFeedback}"</span>
+            </div>
           )}
 
           <div className="w-full max-w-xs mt-3">

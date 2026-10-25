@@ -2,6 +2,7 @@ import re
 import os
 import json
 import random
+import difflib
 import logging
 import httpx
 from datetime import datetime, timedelta
@@ -13,27 +14,28 @@ from config import OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY
 
 logger = logging.getLogger("railvoice.agent_brain")
 
-# City / Station voice aliases
+# City / Station voice aliases (including common STT mishearings and phonetic typos)
 CITY_STATION_ALIASES = {
-    "delhi": "NDLS", "new delhi": "NDLS", "ndls": "NDLS",
-    "mumbai": "MMCT", "bombay": "MMCT", "mumbai central": "MMCT", "mmct": "MMCT", "csmt": "CSMT",
-    "varanasi": "BSB", "banaras": "BSB", "kashi": "BSB", "bsb": "BSB",
-    "kolkata": "HWH", "calcutta": "HWH", "howrah": "HWH", "hwh": "HWH",
-    "bangalore": "SBC", "bengaluru": "SBC", "sbc": "SBC",
-    "chennai": "MAS", "madras": "MAS", "mas": "MAS",
-    "ahmedabad": "ADI", "adi": "ADI",
-    "pune": "PUNE", "jaipur": "JP", "jp": "JP",
+    "delhi": "NDLS", "new delhi": "NDLS", "ndls": "NDLS", "dilli": "NDLS", "delh": "NDLS",
+    "mumbai": "MMCT", "bombay": "MMCT", "mumbai central": "MMCT", "mmct": "MMCT", "csmt": "CSMT", "mumbay": "MMCT",
+    "varanasi": "BSB", "banaras": "BSB", "kashi": "BSB", "bsb": "BSB", "varansi": "BSB", "banaaras": "BSB",
+    "kolkata": "HWH", "calcutta": "HWH", "howrah": "HWH", "hwh": "HWH", "kolkatta": "HWH", "kolkta": "HWH",
+    "bangalore": "SBC", "bengaluru": "SBC", "sbc": "SBC", "banglore": "SBC",
+    "chennai": "MAS", "madras": "MAS", "mas": "MAS", "chenai": "MAS",
+    "ahmedabad": "ADI", "adi": "ADI", "ahmadabad": "ADI", "ahmdabad": "ADI", "amdavad": "ADI",
+    "pune": "PUNE", "poona": "PUNE",
+    "jaipur": "JP", "jp": "JP",
     "lucknow": "LKO", "lko": "LKO",
     "bhopal": "RKMP", "rkmp": "RKMP",
     "kanpur": "CNB", "cnb": "CNB",
     "agra": "AGC", "agc": "AGC",
-    "surat": "ST", "st": "ST",
-    "vadodara": "BRC", "baroda": "BRC", "brc": "BRC",
+    "surat": "ST", "st": "ST", "suart": "ST", "suat": "ST", "soorat": "ST", "surt": "ST",
+    "vadodara": "BRC", "baroda": "BRC", "brc": "BRC", "vadodra": "BRC",
     "mysore": "MYS", "mysuru": "MYS", "mys": "MYS",
     "gwalior": "GWL", "gwl": "GWL",
     "jhansi": "VGLJ", "vglj": "VGLJ",
     "nagpur": "NGP", "ngp": "NGP",
-    "prayagraj": "PRYJ", "allahabad": "PRYJ", "pryj": "PRYJ",
+    "prayagraj": "PRYJ", "allahabad": "PRYJ", "pryj": "PRYJ", "ilahabad": "PRYJ",
     "patna": "PNBE", "pnbe": "PNBE",
     "chandigarh": "CDG", "cdg": "CDG",
     "amritsar": "ASR", "asr": "ASR",
@@ -201,6 +203,63 @@ class AgentBrain:
         self.sessions: Dict[str, VoiceSessionState] = {}
         self.tools = AgentToolRegistry
 
+    async def _generate_llm_response(self, user_text: str, context: str) -> Optional[str]:
+        """Calls Groq, Gemini, or OpenAI if an API key is available."""
+        if GROQ_API_KEY:
+            try:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": "You are Officer Priya, a helpful Indian Railways reservation officer. Speak concisely in 1-2 spoken sentences. Avoid markdown."},
+                        {"role": "user", "content": f"Context: {context}\nCustomer inquiry: {user_text}"}
+                    ],
+                    "temperature": 0.4,
+                    "max_tokens": 100
+                }
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        return resp.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.debug(f"Groq LLM call error: {e}")
+
+        if GEMINI_API_KEY:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                payload = {
+                    "contents": [{"parts": [{"text": f"You are Officer Priya, a helpful Indian Railways reservation officer. Speak concisely in 1-2 spoken sentences. Avoid markdown.\nContext: {context}\nCustomer inquiry: {user_text}"}]}]
+                }
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception as e:
+                logger.debug(f"Gemini LLM call error: {e}")
+
+        if OPENAI_API_KEY:
+            try:
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": "You are Officer Priya, a helpful Indian Railways reservation officer. Speak concisely in 1-2 spoken sentences. Avoid markdown."},
+                        {"role": "user", "content": f"Context: {context}\nCustomer inquiry: {user_text}"}
+                    ],
+                    "max_tokens": 100
+                }
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        return resp.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.debug(f"OpenAI LLM call error: {e}")
+
+        return None
+
     def get_session(self, session_id: str) -> VoiceSessionState:
         if session_id not in self.sessions:
             self.sessions[session_id] = VoiceSessionState(session_id)
@@ -210,10 +269,35 @@ class AgentBrain:
         if not term:
             return None
         cleaned = term.lower().strip()
-        cleaned = re.sub(r'\b(station|junction|jn|city|central|terminal|cantt|railway)\b', '', cleaned).strip()
+        cleaned = re.sub(r'\b(station|junction|jn|city|central|terminal|cantt|railway|from|to|towards)\b', '', cleaned).strip()
+        if not cleaned:
+            return None
+
+        # 1. Exact alias match
         if cleaned in CITY_STATION_ALIASES:
             return CITY_STATION_ALIASES[cleaned]
-        return train_service.normalize_station(term)
+
+        # 2. Exact or substring station match in STATION_MAP
+        norm = train_service.normalize_station(cleaned)
+        if norm:
+            return norm
+
+        # 3. Fuzzy matching against CITY_STATION_ALIASES
+        matches = difflib.get_close_matches(cleaned, CITY_STATION_ALIASES.keys(), n=1, cutoff=0.72)
+        if matches:
+            matched_code = CITY_STATION_ALIASES[matches[0]]
+            logger.info(f"Fuzzy matched station term '{term}' -> '{matches[0]}' ({matched_code})")
+            return matched_code
+
+        # 4. Fuzzy matching against STATION_MAP city names
+        station_names = {v.lower(): k for k, v in STATION_MAP.items()}
+        matches2 = difflib.get_close_matches(cleaned, station_names.keys(), n=1, cutoff=0.72)
+        if matches2:
+            matched_code = station_names[matches2[0]]
+            logger.info(f"Fuzzy matched station term '{term}' -> station name '{matches2[0]}' ({matched_code})")
+            return matched_code
+
+        return None
 
     def _parse_date(self, text: str) -> str:
         lower = text.lower()
@@ -278,6 +362,17 @@ class AgentBrain:
         for city_name, code in CITY_STATION_ALIASES.items():
             for match in re.finditer(rf'\b{re.escape(city_name)}\b', lower):
                 station_positions.append((match.start(), code))
+
+        # Also fuzzy match individual tokens in lower against aliases if no exact match found
+        if not station_positions:
+            tokens = re.findall(r'[a-zA-Z]+', lower)
+            stop_words = {"from", "to", "towards", "train", "ticket", "book", "seats", "seat", "me", "show", "is", "the", "please", "can", "you", "tomorrow", "today"}
+            for token in tokens:
+                if token not in stop_words and len(token) >= 3:
+                    fuzz_code = self._normalize_station_voice(token)
+                    if fuzz_code:
+                        match_idx = lower.find(token)
+                        station_positions.append((match_idx, fuzz_code))
 
         station_positions.sort(key=lambda x: x[0])
         unique_stations = []
@@ -562,19 +657,17 @@ class AgentBrain:
             state.train_name = top_train["train_name"]
 
             cls_avail = []
-            for c_name, c_info in top_train.get("classes", {}).items():
-                cls_avail.append(f"{c_name} (₹{c_info.get('base_fare', c_info.get('fare'))})")
+            for c_name, c_info in list(top_train.get("classes", {}).items())[:3]:
+                cls_avail.append(f"{c_name} at ₹{c_info.get('base_fare', c_info.get('fare'))}")
             classes_str = ", ".join(cls_avail)
 
             spoken = (
-                f"The best and fastest train from {state.from_station_name} to {state.to_station_name} is the "
-                f"{top_train['train_number']} {top_train['train_name']} (rated {top_train.get('rating', '4.8')} stars), departing at {top_train['departure_time']} "
-                f"and arriving at {top_train['arrival_time']} (duration {top_train['duration']}). "
-                f"Available classes: {classes_str}. Which travel class would you like, and how many seats do you need?"
+                f"The best train is the {top_train['train_name']}, departing {top_train['departure_time']} and arriving {top_train['arrival_time']}. "
+                f"Classes available: {classes_str}. Which class and how many seats would you like?"
             )
             return {
                 "text": spoken,
-                "action_badge": f"⭐ Best Train Tool: {top_train['train_name']}",
+                "action_badge": f"⭐ Best Train: {top_train['train_name']}",
                 "tool_called": f"get_best_train({state.from_station} ➔ {state.to_station})",
                 "tool_data": top_train,
                 "booking_state": state.to_dict(),
