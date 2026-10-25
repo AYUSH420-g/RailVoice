@@ -3,13 +3,15 @@ import logging
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
-from config import MONGO_URI, DATABASE_NAME, PORT, HOST
+from config import MONGO_URI, DATABASE_NAME, PORT, HOST, DEEPGRAM_API_KEY
 from database import db_manager
+from aiortc import RTCSessionDescription, RTCIceCandidate
+from services.webrtc_service import webrtc_manager
 from models import (
     BookingRequest, CancellationRequest, Passenger,
     UserRegister, UserLogin, UserResponse, TokenResponse
@@ -322,6 +324,88 @@ async def voice_transcribe_endpoint(request: Request):
     transcript = await voice_service.transcribe_audio_chunk(audio_data, content_type)
     return {"transcript": transcript or ""}
 
+# ----------------- WebRTC Voice Pipeline Endpoints -----------------
+class WebRTCOffer(BaseModel):
+    sdp: str
+    type: str
+    session_id: Optional[str] = None
+    token: Optional[str] = None
+
+class WebRTCIceCandidatePayload(BaseModel):
+    session_id: str
+    candidate: Dict[str, Any]
+
+@app.post("/api/webrtc/offer")
+async def webrtc_offer_endpoint(offer: WebRTCOffer):
+    """
+    Accepts WebRTC SDP offer from client browser, configures bidirectional audio streaming
+    (User Mic -> Deepgram Nova-2 Live STT -> Tool Calling -> LLM -> Deepgram TTS -> WebRTC Audio Track -> User Speaker)
+    and returns WebRTC SDP answer.
+    """
+    try:
+        session = webrtc_manager.create_session(session_id=offer.session_id, token=offer.token)
+        
+        desc = RTCSessionDescription(sdp=offer.sdp, type=offer.type)
+        await session.pc.setRemoteDescription(desc)
+        
+        # Start live Deepgram streaming & pipeline
+        await session.start()
+        
+        answer = await session.pc.createAnswer()
+        await session.pc.setLocalDescription(answer)
+        
+        return {
+            "sdp": session.pc.localDescription.sdp,
+            "type": session.pc.localDescription.type,
+            "session_id": session.session_id,
+            "pipeline": "User Speak ➔ WebRTC ➔ Deepgram STT ➔ Tool Calling ➔ LLM ➔ Deepgram TTS ➔ WebRTC ➔ Output"
+        }
+    except Exception as e:
+        logger.error(f"WebRTC offer error: {e}")
+        raise HTTPException(status_code=500, detail=f"WebRTC negotiation failed: {str(e)}")
+
+@app.post("/api/webrtc/ice-candidate")
+async def webrtc_ice_candidate_endpoint(payload: WebRTCIceCandidatePayload):
+    session = webrtc_manager.get_session(payload.session_id)
+    if not session:
+        return {"status": "session_expired"}
+    
+    cand = payload.candidate
+    try:
+        candidate_obj = RTCIceCandidate(
+            component=cand.get("component", 1),
+            foundation=cand.get("foundation", ""),
+            ip=cand.get("ip", ""),
+            port=cand.get("port", 0),
+            priority=cand.get("priority", 0),
+            protocol=cand.get("protocol", "udp"),
+            type=cand.get("type", "host"),
+            sdpMid=cand.get("sdpMid"),
+            sdpMLineIndex=cand.get("sdpMLineIndex")
+        )
+        await session.pc.addIceCandidate(candidate_obj)
+        return {"status": "candidate_added"}
+    except Exception as e:
+        logger.warning(f"Error adding ICE candidate: {e}")
+        return {"status": "candidate_skipped", "error": str(e)}
+
+@app.get("/api/webrtc/status")
+async def webrtc_status_endpoint():
+    return {
+        "status": "ready",
+        "active_sessions": len(webrtc_manager.sessions),
+        "deepgram_configured": bool(DEEPGRAM_API_KEY),
+        "pipeline": [
+            "1. User Mic Audio via WebRTC",
+            "2. Deepgram Live STT Streaming (Nova-2)",
+            "3. RailVoice Tool Execution & Policy Engine",
+            "4. LLM Dialogue Response",
+            "5. Deepgram TTS Synthesis (Flux / Aura)",
+            "6. WebRTC Outgoing Audio Track",
+            "7. User Speaker Output"
+        ]
+    }
+
 # ----------------- WebSocket Real-time Voice Call -----------------
 @app.websocket("/ws/voice-agent")
 async def voice_agent_websocket(websocket: WebSocket, token: Optional[str] = Query(None)):
@@ -342,9 +426,9 @@ async def voice_agent_websocket(websocket: WebSocket, token: Optional[str] = Que
                 session.user_email = user.get("email", "")
                 session.user_phone = user.get("phone", "")
 
-    # Send initial greeting sound and welcome message with Deepgram Flux Priya voice
+    # Send initial greeting sound and welcome message with Deepgram Aura 2 Thalia voice
     welcome_text = (
-        "Namaste! I am Priya, your RailVoice smart railway booking assistant. "
+        "Hello! I am Thalia, your RailVoice smart railway booking assistant. "
         "I can help you search live trains, check seat availability, and book your tickets. "
         "Where would you like to travel from and to?"
     )
@@ -354,7 +438,7 @@ async def voice_agent_websocket(websocket: WebSocket, token: Optional[str] = Que
         "session_id": session_id,
         "text": welcome_text,
         "audio": welcome_audio,
-        "action_badge": "📞 Officer Priya Online • Deepgram Voice"
+        "action_badge": "📞 Agent Thalia Online • Aura 2 Voice"
     })
 
     try:
